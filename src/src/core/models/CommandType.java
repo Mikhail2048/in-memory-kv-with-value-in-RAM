@@ -1,4 +1,4 @@
-package src;
+package src.core.models;
 
 public enum CommandType {
     GET("GET"),

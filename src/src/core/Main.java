@@ -1,9 +1,11 @@
-package src;
+package src.core;
 
 import src.core.config.CacheConfigConstants;
 import src.core.config.ConfigurationFileParser;
-import src.core.config.InMemoryMapPopulator;
+import src.core.models.CommandType;
+import src.core.models.Record;
 import src.files.FileSegmentsManager;
+import src.files.LocalFilePointersManager;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -17,24 +19,24 @@ import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CompletableFuture;
 
 public class Main {
 
     public static final boolean IS_RUNNING = true;
     private static final InputParser inputParser = new InputParser();
-    private static ConcurrentMap<String, String> localCache;
-    private static ConcurrentMap<String, Long> localCacheMemoryOffset;
+    private static LocalFilePointersManager localPointersManager;
     private static BufferedReader bufferedReader;
     private static OutputStream outputStream;
 
     public static void main(String[] args) throws IOException {
         new ConfigurationFileParser().parseConfiguration();
-        localCache = new InMemoryMapPopulator().populateLocalCacheWithDataFromDirectory();
         new FileSegmentsManager().triggerWatcherThread();
+        localPointersManager = LocalFilePointersManager.getInstance();
         try (final ServerSocket serverSocket = new ServerSocket(4421)) {
             while (IS_RUNNING) {
                 final Socket socket = serverSocket.accept();
@@ -85,12 +87,13 @@ public class Main {
         final List<Record> records = inputParser.parsePut(getDataInputOnly(rawInput, CommandType.PUT));
         records.forEach(record -> {
             try {
+                final Path writableSegmentFile = Paths.get(URI.create("file:///" + System.getProperty(CacheConfigConstants.DATA_DIRECTORY_LOCATION) + File.separator + System.getProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME)));
                 Files.write(
-                        Paths.get(URI.create("file:///" + System.getProperty(CacheConfigConstants.DATA_DIRECTORY_LOCATION) + File.separator + System.getProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME))),
-                        (record.getKey() + ":" + record.getValue()+"\n").getBytes(StandardCharsets.UTF_8),
+                        writableSegmentFile,
+                        (record.getKey() + ":" + record.getValue() + "\n").getBytes(StandardCharsets.UTF_8),
                         StandardOpenOption.APPEND
                 );
-                localCache.put(record.getKey(), record.getValue());
+                localPointersManager.putKeyValuePairToLocalPointerMap(record.getKey(), writableSegmentFile.toFile().length() + (record.getKey() + ":").getBytes(StandardCharsets.UTF_8).length + 1);
                 System.out.println("Put localCache " + record.getKey() + ":" + record.getValue());
             } catch (IOException e) {
                 e.printStackTrace();
@@ -103,7 +106,7 @@ public class Main {
 
     private static void processGetAndRetrieveResponse(StringBuffer rawInput) {
         final String key = inputParser.parseGet(getDataInputOnly(rawInput, CommandType.GET));
-        final String value = localCache.get(key);
+        final String value = localPointersManager.getValueForKey(key);
         try {
             if (value == null) {
                 outputStream.write("NIL\n".getBytes(StandardCharsets.UTF_8));
@@ -117,7 +120,7 @@ public class Main {
     }
 
     private static String getDataInputOnly(StringBuffer rawInput, CommandType commandType) {
-        final int start = rawInput.indexOf(commandType.command);
+        final int start = rawInput.indexOf(commandType.getCommand());
         return rawInput.delete(start, start + 3).toString().trim();
     }
 }

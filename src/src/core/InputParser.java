@@ -1,4 +1,7 @@
-package src;
+package src.core;
+
+import src.core.models.CommandType;
+import src.core.models.Record;
 
 import java.util.Arrays;
 import java.util.List;
