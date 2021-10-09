@@ -15,7 +15,6 @@ import java.io.OutputStreamWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -49,17 +48,36 @@ public class Main {
         outputStream = socket.getOutputStream();
         StringBuffer rawInput = new StringBuffer();
         while (IS_RUNNING) {
-            rawInput.append(bufferedReader.readLine());
-            System.out.println("INPUT : " + rawInput);
-            if (rawInput.toString().length() >= 5) {
-                final CommandType commandType = inputParser.extractCommand(rawInput.toString());
-                if (commandType.equals(CommandType.GET)) {
-                    processGetAndRetrieveResponse(rawInput);
-                } else {
-                    processPut(socket, rawInput);
-                }
+            processUserInputOnSocket(rawInput, socket);
+            rawInput.setLength(0);
+        }
+    }
+
+    private static void processUserInputOnSocket(StringBuffer rawInput, Socket socket) throws IOException {
+        rawInput.append(bufferedReader.readLine());
+        System.out.println("INPUT : " + rawInput);
+        if (rawInput.toString().length() >= 5) {
+            extractCommandAndProcess(rawInput, socket);
+        } else {
+            responseWithInvalidInput(rawInput);
+        }
+    }
+
+    private static void responseWithInvalidInput(StringBuffer rawInput) throws IOException {
+        outputStream.write(String.format("ERROR: Input '%s' is invalid\n", rawInput).getBytes(StandardCharsets.UTF_8));
+        outputStream.flush();
+    }
+
+    private static void extractCommandAndProcess(StringBuffer rawInput, Socket socket) throws IOException {
+        final CommandType commandType = inputParser.extractCommand(rawInput.toString());
+        if (commandType.equals(CommandType.GET)) {
+            processGetAndRetrieveResponse(rawInput);
+        } else {
+            if (inputParser.isValidPutInput(rawInput.toString())) {
+                processPut(socket, rawInput);
+            } else {
+                responseWithInvalidInput(rawInput);
             }
-            rawInput = new StringBuffer();
         }
     }
 

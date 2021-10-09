@@ -24,4 +24,11 @@ public class InputParser {
     public String parseGet(String dataOnlyInput) {
         return dataOnlyInput.trim();
     }
+
+    public boolean isValidPutInput(String rawPutCommand) {
+        if (rawPutCommand == null || rawPutCommand.length() == 0) return false;
+        return rawPutCommand.length() >= 5 &&
+                rawPutCommand.contains(",") &&
+                rawPutCommand.contains("PUT");
+    }
 }
