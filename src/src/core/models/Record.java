@@ -12,6 +12,14 @@ public class Record {
         this.value = value;
     }
 
+    @Override
+    public String toString() {
+        return "Record{" +
+                "key='" + key + '\'' +
+                ", value='" + value + '\'' +
+                '}';
+    }
+
     public String getKey() {
         return key;
     }

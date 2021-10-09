@@ -23,7 +23,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
 public class Main {
 
@@ -59,7 +58,7 @@ public class Main {
         rawInput.append(bufferedReader.readLine());
         System.out.println("INPUT : " + rawInput);
         if (rawInput.toString().length() >= 5) {
-            extractCommandAndProcess(rawInput, socket);
+            extractAndProcessCommand(rawInput, socket);
         } else {
             responseWithInvalidInput(rawInput);
         }
@@ -70,10 +69,10 @@ public class Main {
         outputStream.flush();
     }
 
-    private static void extractCommandAndProcess(StringBuffer rawInput, Socket socket) throws IOException {
+    private static void extractAndProcessCommand(StringBuffer rawInput, Socket socket) throws IOException {
         final CommandType commandType = inputParser.extractCommand(rawInput.toString());
         if (commandType.equals(CommandType.GET)) {
-            processGetAndRetrieveResponse(rawInput);
+            processGet(rawInput);
         } else {
             if (inputParser.isValidPutInput(rawInput.toString())) {
                 processPut(socket, rawInput);
@@ -87,14 +86,15 @@ public class Main {
         final List<Record> records = inputParser.parsePut(getDataInputOnly(rawInput, CommandType.PUT));
         records.forEach(record -> {
             try {
-                final Path writableSegmentFile = Paths.get(URI.create("file:///" + System.getProperty(CacheConfigConstants.DATA_DIRECTORY_LOCATION) + File.separator + System.getProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME)));
+                final Path writableSegmentFile = Paths.get(System.getProperty(CacheConfigConstants.DATA_DIRECTORY_LOCATION) + File.separator + System.getProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME));
+                final long valueByteOffset = writableSegmentFile.toFile().length() + (record.getKey() + ":").getBytes(StandardCharsets.UTF_8).length;
                 Files.write(
                         writableSegmentFile,
                         (record.getKey() + ":" + record.getValue() + "\n").getBytes(StandardCharsets.UTF_8),
                         StandardOpenOption.APPEND
                 );
-                localPointersManager.putKeyValuePairToLocalPointerMap(record.getKey(), writableSegmentFile.toFile().length() + (record.getKey() + ":").getBytes(StandardCharsets.UTF_8).length + 1);
-                System.out.println("Put localCache " + record.getKey() + ":" + record.getValue());
+                localPointersManager.putKeyValuePairToLocalPointerMap(record.getKey(), valueByteOffset);
+                System.out.println("Put to local cache key: " + record.getKey() + ", value :" + valueByteOffset);
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -104,7 +104,7 @@ public class Main {
         bufferedWriter.flush();
     }
 
-    private static void processGetAndRetrieveResponse(StringBuffer rawInput) {
+    private static void processGet(StringBuffer rawInput) {
         final String key = inputParser.parseGet(getDataInputOnly(rawInput, CommandType.GET));
         final String value = localPointersManager.getValueForKey(key);
         try {

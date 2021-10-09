@@ -51,22 +51,23 @@ public class InMemoryHashTablesConstructor {
     public DataFilePointer readValuesMapFromFile(File dataFile) {
         ConcurrentHashMap<String, Long> keyBytesOffsetPointersMap = new ConcurrentHashMap<>();
         try {
-            final DataInputStream dataInputStream = new DataInputStream(new FileInputStream(dataFile));
-            char readSymbol;
+            final FileInputStream fileInputStream = new FileInputStream(dataFile);
             StringBuilder key = new StringBuilder();
-            long valueByteOffset = 0L;
-            while (dataInputStream.available() != 0) {
-                while ((readSymbol = dataInputStream.readChar()) != ':') {
-                    key.append(readSymbol);
-                    valueByteOffset += 2; // Because char is 2 bytes long
+            final byte[] fileContentByteArray = fileInputStream.readAllBytes(); // JVM is capable of handing file size in memory, file size no more then 100KB
+            boolean isKeyRelatedByte = true;
+            for (int i = 0; i < fileContentByteArray.length; i++) {
+                if (fileContentByteArray[i] == '\n') {
+                    key.setLength(0);
+                    isKeyRelatedByte = true;
+                    continue;
                 }
-                valueByteOffset += 3; // Because we read ':' character, but did not count it. Also the value itself starts not by ':', but ty the next byte
-                keyBytesOffsetPointersMap.put(key.toString(), valueByteOffset);
-                key.setLength(0); // Clear the StringBuilder
-                while ((readSymbol = dataInputStream.readChar()) != '\n') {
-                    valueByteOffset += 2;
+                if (fileContentByteArray[i] == ':') {
+                    System.out.printf("Read key/value pair. Key: %s, Value: %s\n", key, (long) (i + 1));
+                    keyBytesOffsetPointersMap.put(key.toString(), (long) (i + 1));
+                    isKeyRelatedByte = false;
+                } else {
+                    if (isKeyRelatedByte) key.append((char) fileContentByteArray[i]);
                 }
-                valueByteOffset += 2;
             }
             return new DataFilePointer(dataFilesProcessingHelper.getDataFileSequenceNumber(dataFile), keyBytesOffsetPointersMap);
         } catch (IOException | FileInvalidFormatException e) {

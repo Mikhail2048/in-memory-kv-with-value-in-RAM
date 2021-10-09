@@ -42,6 +42,10 @@ public class LocalFilePointersManager {
         this.inMemoryMaps = inMemoryHashTablesConstructor.constructDataFilesPointers();
     }
 
+    public void addWritableDataFile(DataFilePointer dataFilePointer) {
+        this.inMemoryMaps.addFirst(dataFilePointer);
+    }
+
     /**
      * Replaces last amount {@param amountOfSquashedMaps} of an in memory maps with the new one.
      * This method will provide an API for {@link src.files.FileSegmentsManager}, where the latter
@@ -96,15 +100,20 @@ public class LocalFilePointersManager {
     }
 
     private void decrementAmountOfReadRequests() {
-        FileSegmentsManager.amountOfCurrentReadRequests.decrementAndGet();
+        System.out.println("Decremented read lock to : " + FileSegmentsManager.amountOfCurrentReadRequests.decrementAndGet());
     }
 
     private void acquireReadLockWithExpectedValue(int expectedValueOfReads) {
         final int actualValue = FileSegmentsManager.amountOfCurrentReadRequests.compareAndExchange(expectedValueOfReads, expectedValueOfReads + 1);
-        if (actualValue == expectedValueOfReads) return;
+        if (actualValue == expectedValueOfReads) {
+            System.out.println("Read lock acquired, current lock value : " + (expectedValueOfReads + 1));
+            return;
+        }
         if (actualValue == -1) {
             acquireReadLockWithExpectedValue(expectedValueOfReads);
+            System.out.println("Unable to acquire read lock, actual value : -1");
         } else {
+            System.out.println("Unable to acquire read lock, actual value : " + actualValue);
             acquireReadLockWithExpectedValue(actualValue);
         }
     }
@@ -115,10 +124,9 @@ public class LocalFilePointersManager {
             targetRandomAccessFile.seek(targetDataFilePointer.getKeyValueByteOffsetOnDiskMap().get(key));
             StringBuilder result = new StringBuilder();
             char readSymbol;
-            while ((readSymbol = targetRandomAccessFile.readChar()) != '\n') {
+            while ((readSymbol = ((char) targetRandomAccessFile.read())) != '\n') {
                 result.append(readSymbol);
             }
-            FileSegmentsManager.amountOfCurrentReadRequests.decrementAndGet();
             return result.toString();
         } catch (IOException e) {
             e.printStackTrace();

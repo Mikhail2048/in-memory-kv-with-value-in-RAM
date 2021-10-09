@@ -2,6 +2,7 @@ package src.files;
 
 import src.core.config.CacheConfigConstants;
 import src.core.InMemoryHashTablesConstructor;
+import src.core.models.DataFilePointer;
 import src.files.exception.FileInvalidFormatException;
 
 import java.io.File;
@@ -26,7 +27,7 @@ public class FileSegmentsManager {
      * = 0  this means, that there is no threads reading, AND FileSegmentsManager is NOT yet acquired decremented the value
      * < 0 - this means, that no threads are reading, and moreover no threads are capable of reading
      */
-    public static final AtomicInteger amountOfCurrentReadRequests = new AtomicInteger(0);
+    public static volatile AtomicInteger amountOfCurrentReadRequests = new AtomicInteger(0);
     private final DataFilesProcessingHelper dataFilesProcessingHelper;
     private final InMemoryHashTablesConstructor inMemoryHashTablesConstructor;
     private final LocalFilePointersManager localFilePointersManager;
@@ -164,16 +165,21 @@ public class FileSegmentsManager {
         final String currentLogFileName = getCurrentLogFileName();
         if (currentLogFileName == null) {
             try {
-                final Path initialLogFile = createNewLogFileWithSeqNumber(1);
-                final String fileName = initialLogFile.getFileName().toString();
-                System.out.println("Creating initial log file with name " + fileName);
-                System.setProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME, fileName);
-                return fileName;
+                return createNewLogFileAndReturnName();
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
         return currentLogFileName;
+    }
+
+    private String createNewLogFileAndReturnName() throws IOException {
+        final Path initialLogFile = createNewLogFileWithSeqNumber(1);
+        localFilePointersManager.addWritableDataFile(new DataFilePointer(1));
+        final String fileName = initialLogFile.getFileName().toString();
+        System.out.println("Creating initial log file with name " + fileName);
+        System.setProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME, fileName);
+        return fileName;
     }
 
     private String getCurrentLogFileName() {
