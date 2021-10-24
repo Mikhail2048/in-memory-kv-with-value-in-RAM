@@ -1,8 +1,8 @@
 package src.core.models;
 
+import java.util.NavigableMap;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.TreeMap;
 
 public class DataFilePointer {
 
@@ -22,23 +22,19 @@ public class DataFilePointer {
      * 170, then this long (value in the ConcurrentHashMap) will be exactly 170, not 169,
      * not or 171.
      */
-    private final ConcurrentMap<String, Long> keyValueByteOffsetOnDiskMap;
+    private NavigableMap<String, Long> keyValueByteOffsetOnDiskRedBlackTree;
 
     public DataFilePointer(long sequenceNumber) {
-        this(sequenceNumber, new ConcurrentHashMap<>());
+        this(sequenceNumber, new TreeMap<>());
     }
 
-    public DataFilePointer(long sequenceNumber, ConcurrentMap<String, Long> inMemoryMap) {
+    public DataFilePointer(long sequenceNumber, NavigableMap<String, Long> keyValueByteOffsetOnDiskRedBlackTree) {
         this.sequenceNumber = sequenceNumber;
-        this.keyValueByteOffsetOnDiskMap = inMemoryMap;
+        this.keyValueByteOffsetOnDiskRedBlackTree = keyValueByteOffsetOnDiskRedBlackTree;
     }
 
     public long getSequenceNumber() {
         return sequenceNumber;
-    }
-
-    public ConcurrentMap<String, Long> getKeyValueByteOffsetOnDiskMap() {
-        return keyValueByteOffsetOnDiskMap;
     }
 
     @Override
@@ -52,5 +48,13 @@ public class DataFilePointer {
     @Override
     public int hashCode() {
         return Objects.hash(sequenceNumber);
+    }
+
+    public void setKeyValueByteOffsetOnDiskRedBlackTree(NavigableMap<String, Long> keyValueByteOffsetOnDiskRedBlackTree) {
+        this.keyValueByteOffsetOnDiskRedBlackTree = keyValueByteOffsetOnDiskRedBlackTree;
+    }
+
+    public NavigableMap<String, Long> getKeyValueByteOffsetOnDiskRedBlackTree() {
+        return keyValueByteOffsetOnDiskRedBlackTree;
     }
 }

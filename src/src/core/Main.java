@@ -1,6 +1,5 @@
 package src.core;
 
-import src.core.config.CacheConfigConstants;
 import src.core.config.ConfigurationFileParser;
 import src.core.models.CommandType;
 import src.core.models.Record;
@@ -9,34 +8,30 @@ import src.files.LocalFilePointersManager;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 public class Main {
 
     public static final boolean IS_RUNNING = true;
     private static final InputParser inputParser = new InputParser();
+    private static final int AISA_PORT = 4421;
     private static LocalFilePointersManager localPointersManager;
     private static BufferedReader bufferedReader;
     private static OutputStream outputStream;
 
     public static void main(String[] args) throws IOException {
         new ConfigurationFileParser().parseConfiguration();
-        new FileSegmentsManager().triggerWatcherThread();
+        FileSegmentsManager.getInstance().triggerWatcherThread();
         localPointersManager = LocalFilePointersManager.getInstance();
-        try (final ServerSocket serverSocket = new ServerSocket(4421)) {
+        try (final ServerSocket serverSocket = new ServerSocket(AISA_PORT)) {
+            System.out.printf("Aisa is launched on port '%s' and ready to accept connections\n", AISA_PORT);
             while (IS_RUNNING) {
                 final Socket socket = serverSocket.accept();
                 serveOpenedConnection(socket);
@@ -86,15 +81,8 @@ public class Main {
         final List<Record> records = inputParser.parsePut(getDataInputOnly(rawInput, CommandType.PUT));
         records.forEach(record -> {
             try {
-                final Path writableSegmentFile = Paths.get(System.getProperty(CacheConfigConstants.DATA_DIRECTORY_LOCATION) + File.separator + System.getProperty(CacheConfigConstants.CURRENT_LOG_FILE_NAME));
-                final long valueByteOffset = writableSegmentFile.toFile().length() + (record.getKey() + ":").getBytes(StandardCharsets.UTF_8).length;
-                Files.write(
-                        writableSegmentFile,
-                        (record.getKey() + ":" + record.getValue() + "\n").getBytes(StandardCharsets.UTF_8),
-                        StandardOpenOption.APPEND
-                );
-                localPointersManager.putKeyValuePairToLocalPointerMap(record.getKey(), valueByteOffset);
-                System.out.println("Put to local cache key: " + record.getKey() + ", value :" + valueByteOffset);
+                localPointersManager.putKeyValuePairToLocalTree(record.getKey(), record.getValue());
+                System.out.println("Put to local cache key: " + record.getKey() + ", value :" + record.getValue());
             } catch (IOException e) {
                 e.printStackTrace();
             }

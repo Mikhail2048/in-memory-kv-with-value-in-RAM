@@ -12,6 +12,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -49,7 +51,7 @@ public class InMemoryHashTablesConstructor {
     }
 
     public DataFilePointer readValuesMapFromFile(File dataFile) {
-        ConcurrentHashMap<String, Long> keyBytesOffsetPointersMap = new ConcurrentHashMap<>();
+        NavigableMap<String, Long> keyBytesOffsetPointersMap = new TreeMap<>();
         try {
             final FileInputStream fileInputStream = new FileInputStream(dataFile);
             StringBuilder key = new StringBuilder();
