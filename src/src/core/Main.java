@@ -28,8 +28,9 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         new ConfigurationFileParser().parseConfiguration();
-        FileSegmentsManager.getInstance().triggerWatcherThread();
+        FileSegmentsManager.getInstance().prepareWorkspaceFilesAndInitiateMergerThread();
         localPointersManager = LocalFilePointersManager.getInstance();
+        new LogFileRecoverer().startRecoveryProcess();
         try (final ServerSocket serverSocket = new ServerSocket(AISA_PORT)) {
             System.out.printf("Aisa is launched on port '%s' and ready to accept connections\n", AISA_PORT);
             while (IS_RUNNING) {

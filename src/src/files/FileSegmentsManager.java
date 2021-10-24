@@ -8,10 +8,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NavigableMap;
@@ -60,9 +62,13 @@ public class FileSegmentsManager {
     }
 
     private void prepareTemporaryLogFile() {
-        System.out.printf("Creating temporary log file for AISA in-memory records recovery. Location: %s\n", getTemporaryLogAbsolutePath());
         try {
-            Files.newOutputStream(Path.of(getTemporaryLogAbsolutePath()), StandardOpenOption.CREATE).close();
+            if (Files.exists(Path.of(getTemporaryLogAbsolutePath()))) {
+                System.out.printf("Log file already exist. Location: '%s'\n", getTemporaryLogAbsolutePath());
+            } else {
+                Files.createFile(Path.of(getTemporaryLogAbsolutePath()));
+                System.out.printf("Creating temporary log file for AISA in-memory records recovery. Location: %s\n", getTemporaryLogAbsolutePath());
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -90,7 +96,6 @@ public class FileSegmentsManager {
             } else {
                 writableSegmentFile = createNewSSTableFileFileIfNecessary(theMostRecentDataFileSegmentNumber);
             }
-            System.out.printf("Created initial SSTable file. Location: %s\n", writableSegmentFile.toAbsolutePath());
             System.setProperty(CacheConfigConstants.CURRENT_WRITABLE_SS_TABLE_FILE_LOCATION, writableSegmentFile.toAbsolutePath().toString());
         } catch (FileInvalidFormatException | IOException e) {
             e.printStackTrace();
@@ -99,7 +104,7 @@ public class FileSegmentsManager {
 
     private Path createNewSSTableFileFileIfNecessary(Long theMostRecentDataFileSegmentNumber) throws IOException {
         final Path absolutePathForWritableSSTableDataFile;
-        if (isDataFileWithPassedSegmentNumberEmpty(theMostRecentDataFileSegmentNumber)) {
+        if (!isDataFileWithPassedSegmentNumberEmpty(theMostRecentDataFileSegmentNumber)) {
             createNewSSTableFileWithSeqNumber(theMostRecentDataFileSegmentNumber + 1);
             absolutePathForWritableSSTableDataFile = dataFilesProcessingHelper.createAbsolutePathForFileWithNumber(theMostRecentDataFileSegmentNumber + 1);
             System.out.printf(
@@ -119,7 +124,7 @@ public class FileSegmentsManager {
         return Files.size(dataFilesProcessingHelper.createAbsolutePathForFileWithNumber(theMostRecentDataFileSegmentNumber)) == 0;
     }
 
-    public void triggerWatcherThread() {
+    public void prepareWorkspaceFilesAndInitiateMergerThread() {
         final Thread elderSegmentsSquasherThread = new Thread(this::triggerSquashElderSegmentsProcess);
 //        final Thread writableFileSegmentSplitterThread = new Thread(this::triggerArchiveCurrentLogFileProcess);
         elderSegmentsSquasherThread.setDaemon(true);

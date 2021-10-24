@@ -3,6 +3,7 @@ package src.files;
 import src.core.InMemoryHashTablesConstructor;
 import src.core.config.CacheConfigConstants;
 import src.core.models.DataFilePointer;
+import src.core.models.Record;
 import src.files.exception.FileInvalidFormatException;
 
 import java.io.File;
@@ -15,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.NavigableMap;
@@ -38,8 +40,6 @@ public class LocalFilePointersManager {
     private final InMemoryHashTablesConstructor inMemoryHashTablesConstructor;
     private final NavigableMap<String, String> memoryRedBlackTree;
     private static LocalFilePointersManager instance;
-
-    final String dataDirectoryLocation = System.getProperty(CacheConfigConstants.DATA_DIRECTORY_LOCATION);
 
     private final Object writeLock = new Object();
 
@@ -77,6 +77,10 @@ public class LocalFilePointersManager {
         }
     }
 
+    public void putAllIntoInMemoryTree(Collection<Record> records) {
+        records.forEach(record -> memoryRedBlackTree.put(record.getKey(), record.getValue()));
+    }
+
     public void putKeyValuePairToLocalTree(String key, String value) throws IOException {
         doubleCheckLockingOnInMemoryRBTSize();
         final Path temporaryLogFileLocation = Paths.get(System.getProperty(CacheConfigConstants.TEMPORARY_LOG_LOCATION));
@@ -99,7 +103,7 @@ public class LocalFilePointersManager {
     }
 
     private void flushInMemoryRedBlackTreeToDisk() {
-        try (final FileChannel temporaryLogFileChannel = FileChannel.open(Path.of(System.getProperty(CacheConfigConstants.TEMPORARY_LOG_LOCATION)));
+        try (final FileChannel temporaryLogFileChannel = FileChannel.open(Path.of(System.getProperty(CacheConfigConstants.TEMPORARY_LOG_LOCATION)), StandardOpenOption.WRITE);
              final FileLock logFileLock = temporaryLogFileChannel.lock()) {
             persistCurrentInMemoryRBTToSSTableOnDisk();
         } catch (FileInvalidFormatException | IOException e) {
