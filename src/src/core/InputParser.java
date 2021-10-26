@@ -1,6 +1,7 @@
 package src.core;
 
 import src.core.models.CommandType;
+import src.core.models.RangeGetRequest;
 import src.core.models.Record;
 
 import java.util.Arrays;
@@ -10,8 +11,9 @@ import java.util.stream.Collectors;
 public class InputParser {
 
     public CommandType extractCommand(String rawInput) {
-        if (rawInput.split(" ")[0].equals(CommandType.GET.getCommand())) {
-            return CommandType.GET;
+        final String[] splitInput = rawInput.split(" ");
+        if (splitInput[0].equals(CommandType.GET.getCommand())) {
+            return splitInput[1].contains("-") ? CommandType.GET_RANGE : CommandType.GET;
         }
         return CommandType.PUT;
     }
@@ -33,5 +35,16 @@ public class InputParser {
         return rawPutCommand.length() >= 5 &&
                 rawPutCommand.contains(",") &&
                 rawPutCommand.contains("PUT");
+    }
+
+    public RangeGetRequest extractRangeGetRequest(String rawInput) {
+        final int indexOfSymbolRightAfterCommand = rawInput.indexOf(CommandType.GET_RANGE.getCommand()) + CommandType.GET_RANGE.getCommand().length();
+        final String[] requestedRangeParts = rawInput.substring(indexOfSymbolRightAfterCommand).trim().split("-");
+        return new RangeGetRequest(requestedRangeParts[0], requestedRangeParts[1]);
+    }
+
+    public boolean isGetRangeRequestValid(String rawInput) {
+        final RangeGetRequest rangeGetRequest = this.extractRangeGetRequest(rawInput);
+        return rangeGetRequest.getFrom().compareTo(rangeGetRequest.getTo()) < 0;
     }
 }

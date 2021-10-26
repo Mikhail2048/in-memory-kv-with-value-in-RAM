@@ -51,7 +51,7 @@ public class LogFileRecoverer {
 
     private void logRecoveredRecords(Collection<Record> recoveredRecords) {
         if (!recoveredRecords.isEmpty()) {
-            System.out.printf("Recovered %d records during parsing\n", recoveredRecords.size());
+            System.out.printf("Recovered to writable SSTable %d records during parsing log file\n", recoveredRecords.size());
         } else {
             System.out.println("Recovery process do not detect any valid records to be restored");
         }

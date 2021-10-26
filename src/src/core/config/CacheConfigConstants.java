@@ -22,4 +22,9 @@ public class CacheConfigConstants {
     public static final String DATA_FILES_EXTENSION = "data.files.extension";
     public static final String MAX_DATA_FILES_AMOUNT = "data.files.max.amount";
     public static final String DATA_FILES_MAX_SIZE_IN_KILOBYTES = "data.files.max.kilobytes.size";
+
+    /**
+     * Maximum size of the value (in bytes), that can be provided to AISA during {@link src.core.models.CommandType#PUT}
+     */
+    public static final String VALUE_MAX_SIZE_IN_BYTES = "value.max.byte.size";
 }
