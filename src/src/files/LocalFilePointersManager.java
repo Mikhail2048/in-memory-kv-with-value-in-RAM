@@ -158,7 +158,7 @@ public class LocalFilePointersManager {
     }
 
     public List<String> getValuesInRange(String from, String to) {
-        final SortedMap<String, String> recordsFoundInRBT = memoryRedBlackTree.subMap(from, to);
+        final SortedMap<String, String> recordsFoundInRBT = memoryRedBlackTree.subMap(from, true, to, true);
         List<String> resultValues = new ArrayList<>(recordsFoundInRBT.values());
         Set<KeyFileEntry> alreadyFoundKey = recordsFoundInRBT.keySet().stream().map(KeyFileEntry::new).collect(Collectors.toSet());
         traverseDataFilePointersAndFillResultValues(resultValues, alreadyFoundKey, from, to);
@@ -171,12 +171,12 @@ public class LocalFilePointersManager {
         dataFileSeqNumberScanIntervalMap.entrySet().stream()
                 .map(this::readDataFileOffset)
                 .filter(Objects::nonNull)
-                .map(this::removeTailIfRequired)
+                .peek(this::removeTailIfRequired)
                 .forEach(tailedDataFileRawContent -> {
                     final byte[] readBytes = tailedDataFileRawContent.getRawData().getBytes(StandardCharsets.UTF_8);
                     alreadyFoundKeys.stream()
                             .filter(keyFileEntry -> keyFileEntry.getDataFileSequenceNumber() == tailedDataFileRawContent.getDataFileSequenceNumber())
-                            .map(KeyFileEntry::getByteOffsetOfTargetValue)
+                            .map(keyFileEntry -> keyFileEntry.getByteOffsetOfTargetValue() - tailedDataFileRawContent.getRawDataByteOffset())
                             .map(byteOffsetOfTheValueWeAreInterestedIn -> parseValue(readBytes, Math.toIntExact(byteOffsetOfTheValueWeAreInterestedIn)))
                             .forEach(resultValues::add);
                 });
@@ -186,7 +186,7 @@ public class LocalFilePointersManager {
         int currentByteIndex = byteOffsetOfTheValueWeAreInterestedIn;
         StringBuilder value = new StringBuilder();
         while (readBytes[currentByteIndex] != '\n') {
-            value.append(readBytes[currentByteIndex]);
+            value.append((char) readBytes[currentByteIndex]);
             currentByteIndex++;
         }
         return value.toString();
@@ -217,7 +217,8 @@ public class LocalFilePointersManager {
                             dataFileSequenceNumberBordersReadEntry.getKey(),
                             Math.toIntExact(dataFileSequenceNumberBordersReadEntry.getValue().get(0)),
                             numberOfLastByteToRead
-                    )
+                    ),
+                    dataFileSequenceNumberBordersReadEntry.getValue().get(0)
             );
         }
         return null;
@@ -298,7 +299,7 @@ public class LocalFilePointersManager {
 
     private void addKeyFileEntryValueByteOffsetToListWithSingleElement(KeyFileEntry keyFileEntry, List<Long> byteOffsetsList) {
         if (keyFileEntry.getByteOffsetOfTargetValue() < byteOffsetsList.get(0)) {
-            byteOffsetsList.set(1, byteOffsetsList.get(0));
+            byteOffsetsList.add(byteOffsetsList.get(0));
             byteOffsetsList.set(0, keyFileEntry.getByteOffsetOfTargetValue());
         } else {
             byteOffsetsList.add(keyFileEntry.getByteOffsetOfTargetValue());
@@ -314,7 +315,7 @@ public class LocalFilePointersManager {
      */
     private void traverseInMemoryArchivedRBTAndFillSetOfFoundKeys(Set<KeyFileEntry> alreadyFoundKey, String fromKey, String toKey) {
         for (DataFilePointer inMemoryMap : inMemoryMaps) {
-            final SortedMap<String, Long> keysFoundInCurrentArchivedRBT = inMemoryMap.getKeyValueByteOffsetOnDiskRedBlackTree().subMap(fromKey, toKey);
+            final SortedMap<String, Long> keysFoundInCurrentArchivedRBT = inMemoryMap.getKeyValueByteOffsetOnDiskRedBlackTree().subMap(fromKey, true, toKey, true);
             keysFoundInCurrentArchivedRBT.entrySet()
                     .stream()
                     .filter(keyValueByteOffset -> !alreadyFoundKey.contains(new KeyFileEntry(keyValueByteOffset.getKey())))
@@ -356,7 +357,7 @@ public class LocalFilePointersManager {
 
     private class DataFileRawContent {
 
-        private final long dataFileSequenceNumber;
+        private final Long dataFileSequenceNumber;
 
         public void setRawData(String rawData) {
             this.rawData = rawData;
@@ -364,22 +365,27 @@ public class LocalFilePointersManager {
 
         private String rawData;
 
-        public DataFileRawContent(long dataFileSequenceNumber, String rawData) {
+        /**
+         * The byte offset, beginning from which {@link #rawData} was read
+         */
+        private final Long rawDataByteOffset;
+
+        public DataFileRawContent(Long dataFileSequenceNumber, String rawData, Long rawDataByteOffset) {
             this.dataFileSequenceNumber = dataFileSequenceNumber;
             this.rawData = rawData;
+            this.rawDataByteOffset = rawDataByteOffset;
         }
 
-        public long getDataFileSequenceNumber() {
+        public Long getDataFileSequenceNumber() {
             return dataFileSequenceNumber;
         }
 
         public String getRawData() {
             return rawData;
         }
-    }
 
-    public void test() {
-        final List<String> valuesInRange = getValuesInRange("28819230", "41230131");
-        System.out.println(valuesInRange);
+        public Long getRawDataByteOffset() {
+            return rawDataByteOffset;
+        }
     }
 }

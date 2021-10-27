@@ -36,13 +36,13 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         initialize();
-//        try (final ServerSocket serverSocket = new ServerSocket(AISA_PORT)) {
-//            System.out.printf("Aisa is launched on port '%s' and ready to accept connections\n", AISA_PORT);
-//            while (IS_RUNNING) {
-//                final Socket socket = serverSocket.accept();
-//                serveOpenedConnection(socket);
-//            }
-//        }
+        try (final ServerSocket serverSocket = new ServerSocket(AISA_PORT)) {
+            System.out.printf("Aisa is launched on port '%s' and ready to accept connections\n", AISA_PORT);
+            while (IS_RUNNING) {
+                final Socket socket = serverSocket.accept();
+                serveOpenedConnection(socket);
+            }
+        }
     }
 
     private static void initialize() throws IOException {
@@ -53,7 +53,6 @@ public class Main {
         commandProcessorsMap = List.of(PutCommandProcessor.getInstance(), GetCommandProcessor.getInstance(), GetRangeCommandProcessor.getInstance())
                 .stream()
                 .collect(Collectors.toConcurrentMap(CommandProcessor::supports, commandProcessor -> commandProcessor));
-        localPointersManager.test();
     }
 
     private static void serveOpenedConnection(Socket socket) throws IOException {

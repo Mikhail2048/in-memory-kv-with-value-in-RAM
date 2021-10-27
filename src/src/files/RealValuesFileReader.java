@@ -78,7 +78,8 @@ public class RealValuesFileReader {
         final Path absolutePathForFileToScan = dataFilesProcessingHelper.createAbsolutePathForFileWithNumber(dataFileSeqNumber);
         try (RandomAccessFile randomAccessFile = new RandomAccessFile(absolutePathForFileToScan.toString(), "r")) {
             byte[] buffer = new byte[(to - from) + 1];
-            randomAccessFile.read(buffer, from, (to - from) + 1);
+            randomAccessFile.seek(from);
+            randomAccessFile.read(buffer, 0, (to - from) + 1);
             return new String(buffer, StandardCharsets.UTF_8);
         } catch (IOException e) {
             e.printStackTrace();

@@ -30,7 +30,7 @@ public class KeyFileEntry {
         return key;
     }
 
-    public long getDataFileSequenceNumber() {
+    public Long getDataFileSequenceNumber() {
         return dataFileSequenceNumber;
     }
 
