@@ -36,7 +36,7 @@ public class GetCommandProcessor implements CommandProcessor {
     }
 
     @Override
-    public void processCommand(OutputStream outputStream, StringBuffer rawInput) throws IOException {
+    public void processCommand(OutputStream outputStream, StringBuffer rawInput) {
         final String key = inputParser.parseGet(getDataInputOnly(rawInput, CommandType.GET));
         final String value = localFilePointersManager.getValueForKey(key);
         try {

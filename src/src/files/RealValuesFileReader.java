@@ -1,5 +1,6 @@
 package src.files;
 
+import src.core.config.CacheConfigConstants;
 import src.core.models.DataFilePointer;
 import src.core.models.Record;
 
@@ -66,6 +67,10 @@ public class RealValuesFileReader {
         }
     }
 
+    public String scanDataFileToByteOffset(long dataFileSeqNumber, int to) {
+        return this.scanDataFileFromToByteOffset(dataFileSeqNumber, 0, to);
+    }
+
     /**
      * Scans particular Data File from the particular offset to the particular offset
      * @param dataFileSeqNumber - sequence number of data file to read
@@ -81,6 +86,25 @@ public class RealValuesFileReader {
             randomAccessFile.seek(from);
             randomAccessFile.read(buffer, 0, (to - from) + 1);
             return new String(buffer, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return EMPTY_STRING;
+        }
+    }
+
+    public String readSingleValue(long dataFileSeqNumber, long byteOffset) {
+        final Path absolutePathForFileToScan = dataFilesProcessingHelper.createAbsolutePathForFileWithNumber(dataFileSeqNumber);
+        try (RandomAccessFile randomAccessFile = new RandomAccessFile(absolutePathForFileToScan.toString(), "r")) {
+            byte[] buffer = new byte[Integer.parseInt(System.getProperty(CacheConfigConstants.VALUE_MAX_SIZE_IN_BYTES))];
+            randomAccessFile.seek(byteOffset);
+            randomAccessFile.read(buffer);
+            StringBuilder value = new StringBuilder();
+            for (byte b : buffer) {
+                final char currentChar = (char) b;
+                if (currentChar == '\n') break;
+                value.append(currentChar);
+            }
+            return value.toString();
         } catch (IOException e) {
             e.printStackTrace();
             return EMPTY_STRING;

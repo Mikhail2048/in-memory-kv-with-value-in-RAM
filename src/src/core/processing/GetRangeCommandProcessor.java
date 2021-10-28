@@ -38,6 +38,7 @@ public class GetRangeCommandProcessor implements CommandProcessor {
         if (!isGetRangeRequestValid) {
             outputStream.write(String.format("ERROR. Range request: '%s' is not valid. Provided range does not make sense\n", rawInput).getBytes(StandardCharsets.UTF_8));
             outputStream.flush();
+            return false;
         }
         return true;
     }

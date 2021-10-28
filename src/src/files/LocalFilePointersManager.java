@@ -3,8 +3,11 @@ package src.files;
 import src.core.InMemoryRedBlackTreesConstructor;
 import src.core.config.CacheConfigConstants;
 import src.core.models.DataFilePointer;
+import src.core.models.DataFileRawContent;
+import src.core.models.DataFileScanOptions;
 import src.core.models.KeyFileEntry;
 import src.core.models.Record;
+import src.core.processing.RawDataParser;
 import src.files.exception.FileInvalidFormatException;
 
 import java.io.File;
@@ -25,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -46,6 +50,7 @@ public class LocalFilePointersManager {
     private final InMemoryRedBlackTreesConstructor inMemoryRedBlackTreesConstructor;
     private final NavigableMap<String, String> memoryRedBlackTree;
     private final RealValuesFileReader realValuesFileReader;
+    private final RawDataParser rawDataParser;
 
     private final Object writeLock = new Object();
     private static LocalFilePointersManager instance;
@@ -66,6 +71,7 @@ public class LocalFilePointersManager {
         this.inMemoryMaps = inMemoryRedBlackTreesConstructor.constructDataFilesPointers();
         this.memoryRedBlackTree = Collections.synchronizedNavigableMap(new TreeMap<>()); //TODO: find out a better approach then synchronization
         this.realValuesFileReader = new RealValuesFileReader();
+        this.rawDataParser = RawDataParser.getInstance();
     }
 
     /**
@@ -131,7 +137,9 @@ public class LocalFilePointersManager {
                 .peek(keyValueEntry -> dataToBeFlushedToDisk.append(keyValueEntry.getKey()).append(":").append(keyValueEntry.getValue()).append("\n"))
                 .forEach(keyValueEntry -> {
                     final long currentValueByteOffset = valueByteOffset.addAndGet((keyValueEntry.getKey() + ":").getBytes(StandardCharsets.UTF_8).length + 1);
-                    archivedTreeMap.put(keyValueEntry.getKey(), currentValueByteOffset);
+                    if (valueByteOffset.get() % 100 == 0) {
+                        archivedTreeMap.put(keyValueEntry.getKey(), currentValueByteOffset);
+                    }
                     valueByteOffset.addAndGet((keyValueEntry.getValue() + "\n").getBytes(StandardCharsets.UTF_8).length);
                 });
         writePassedDataToCurrentSSTable(dataToBeFlushedToDisk);
@@ -177,19 +185,9 @@ public class LocalFilePointersManager {
                     alreadyFoundKeys.stream()
                             .filter(keyFileEntry -> keyFileEntry.getDataFileSequenceNumber() == tailedDataFileRawContent.getDataFileSequenceNumber())
                             .map(keyFileEntry -> keyFileEntry.getByteOffsetOfTargetValue() - tailedDataFileRawContent.getRawDataByteOffset())
-                            .map(byteOffsetOfTheValueWeAreInterestedIn -> parseValue(readBytes, Math.toIntExact(byteOffsetOfTheValueWeAreInterestedIn)))
+                            .map(byteOffsetOfTheValueWeAreInterestedIn -> rawDataParser.parseValue(readBytes, Math.toIntExact(byteOffsetOfTheValueWeAreInterestedIn)))
                             .forEach(resultValues::add);
                 });
-    }
-
-    private String parseValue(byte[] readBytes, int byteOffsetOfTheValueWeAreInterestedIn) {
-        int currentByteIndex = byteOffsetOfTheValueWeAreInterestedIn;
-        StringBuilder value = new StringBuilder();
-        while (readBytes[currentByteIndex] != '\n') {
-            value.append((char) readBytes[currentByteIndex]);
-            currentByteIndex++;
-        }
-        return value.toString();
     }
 
     private DataFileRawContent removeTailIfRequired(DataFileRawContent dataFileRawContent) {
@@ -210,7 +208,13 @@ public class LocalFilePointersManager {
      */
     private DataFileRawContent readDataFileOffset(Map.Entry<Long, List<Long>> dataFileSequenceNumberBordersReadEntry) {
         if (dataFileSequenceNumberBordersReadEntry.getValue() != null) {
-            final int numberOfLastByteToRead = determineLastByteToRead(dataFileSequenceNumberBordersReadEntry);
+            final int numberOfLastByteToRead = determineLastByteToRead(
+                    new DataFileScanOptions(
+                            dataFileSequenceNumberBordersReadEntry.getKey(),
+                            dataFileSequenceNumberBordersReadEntry.getValue().get(0),
+                            dataFileSequenceNumberBordersReadEntry.getValue().size() == 1 ? null : dataFileSequenceNumberBordersReadEntry.getValue().get(1)
+                    )
+            );
             return new DataFileRawContent(
                     dataFileSequenceNumberBordersReadEntry.getKey(),
                     realValuesFileReader.scanDataFileFromToByteOffset(
@@ -224,12 +228,12 @@ public class LocalFilePointersManager {
         return null;
     }
 
-    private int determineLastByteToRead(Map.Entry<Long, List<Long>> dataFileSequenceNumberBordersReadEntry) {
+    private int determineLastByteToRead(DataFileScanOptions dataFileScanOptions) {
         final int numberOfLastByteToRead;
-        if (dataFileSequenceNumberBordersReadEntry.getValue().size() == 1) {
-            numberOfLastByteToRead = determineWhereToStopReading(Math.toIntExact(dataFileSequenceNumberBordersReadEntry.getValue().get(0)), dataFileSequenceNumberBordersReadEntry.getKey());
+        if (Objects.isNull(dataFileScanOptions.getToByteOffset())) {
+            numberOfLastByteToRead = determineWhereToStopReading(Math.toIntExact(dataFileScanOptions.getFromByteOffset()), dataFileScanOptions.getDataFileSequenceNumber());
         } else {
-            numberOfLastByteToRead = determineWhereToStopReading(Math.toIntExact(dataFileSequenceNumberBordersReadEntry.getValue().get(1)), dataFileSequenceNumberBordersReadEntry.getKey());
+            numberOfLastByteToRead = determineWhereToStopReading(Math.toIntExact(dataFileScanOptions.getToByteOffset()), dataFileScanOptions.getDataFileSequenceNumber());
         }
         return numberOfLastByteToRead;
     }
@@ -325,15 +329,84 @@ public class LocalFilePointersManager {
         }
     }
 
+    /**
+     * @param key - the key that we are looking for
+     * @return the most recent value for the specified key, or this key was not found, then {@literal null}
+     */
     private String findValueInArchivedSegments(String key) {
         acquireReadLockWithExpectedValue(0);
-        final String value = inMemoryMaps.stream()
-                .filter(dataFilePointer -> dataFilePointer.getKeyValueByteOffsetOnDiskRedBlackTree().containsKey(key))
-                .findFirst()
-                .map(targetDataFilePointer -> realValuesFileReader.findValueByKeyInTargetFile(key, targetDataFilePointer))
-                .orElse(null);
+        for (DataFilePointer inMemoryMap : inMemoryMaps) {
+            Long targetValueOffset;
+            if ((targetValueOffset = inMemoryMap.getKeyValueByteOffsetOnDiskRedBlackTree().get(key)) != null) {
+                return realValuesFileReader.readSingleValue(inMemoryMap.getSequenceNumber(), targetValueOffset);
+            }
+            final DataFileScanOptions dataFileScanOptions = extractPossibleSearchBorders(key, inMemoryMap);
+            final DataFileRawContent dataFileRawContent = scanAppropriateDataFileArea(dataFileScanOptions);
+            removeTailIfRequired(dataFileRawContent);
+            final List<Record> records = rawDataParser.parseKeyValuePairs(dataFileRawContent.getRawData().getBytes(StandardCharsets.UTF_8));
+            int index = Collections.binarySearch(records, new Record(key));
+            if (index > 0) {
+                /**
+                 * This is because during binary search there is no guarantee, that we will get the most recent
+                 * (in our case the rightest) value for the specified key. We need, jsut in case, check, whenever
+                 * there are some records, that goes <b>after</b> returned binary search index, that has exactly
+                 * the same key as records.get(index).
+                 */
+                while (records.get(index + 1).compareTo(records.get(index)) == 0) {
+                    index++;
+                }
+                return records.get(index).getValue();
+            }
+        }
         decrementAmountOfReadRequests();
-        return value;
+        return null;
+    }
+
+    private DataFileRawContent scanAppropriateDataFileArea(DataFileScanOptions dataFileScanOptions) {
+        if (dataFileScanOptions.getFromByteOffset() != null && dataFileScanOptions.getToByteOffset() == null) {
+            return new DataFileRawContent(
+                    dataFileScanOptions.getDataFileSequenceNumber(),
+                    realValuesFileReader.scanDataFileFromByteOffset(
+                            dataFileScanOptions.getDataFileSequenceNumber(),
+                            Math.toIntExact(dataFileScanOptions.getFromByteOffset())
+                    ),
+                    dataFileScanOptions.getFromByteOffset()
+            );
+        }
+        if (dataFileScanOptions.getFromByteOffset() == null && dataFileScanOptions.getToByteOffset() != null) {
+            return new DataFileRawContent(
+                    dataFileScanOptions.getDataFileSequenceNumber(),
+                    realValuesFileReader.scanDataFileToByteOffset(
+                            dataFileScanOptions.getDataFileSequenceNumber(),
+                            Math.toIntExact(dataFileScanOptions.getToByteOffset())
+                    ),
+                    0L
+            );
+        }
+        return new DataFileRawContent(
+                dataFileScanOptions.getDataFileSequenceNumber(),
+                realValuesFileReader.scanDataFileFromToByteOffset(
+                        dataFileScanOptions.getDataFileSequenceNumber(),
+                        Math.toIntExact(dataFileScanOptions.getFromByteOffset()),
+                        Math.toIntExact(dataFileScanOptions.getToByteOffset())),
+                dataFileScanOptions.getFromByteOffset()
+        );
+    }
+
+    /**
+     * Because now the index is sparse, we can only assume that the passed key <b>may be</b> present
+     * in the passed dataFilePointer.
+     * @param key - to check for possibility of presence in the passed dataFilePointer
+     * @return DataFileScanOptions that represents what data file and where exactly to read
+     */
+    private DataFileScanOptions extractPossibleSearchBorders(String key, DataFilePointer dataFilePointer) {
+        final Map.Entry<String, Long> upperBorder= dataFilePointer.getKeyValueByteOffsetOnDiskRedBlackTree().ceilingEntry(key);
+        final Map.Entry<String, Long> lowestEntry = dataFilePointer.getKeyValueByteOffsetOnDiskRedBlackTree().floorEntry(key);
+        return new DataFileScanOptions(
+                dataFilePointer.getSequenceNumber(),
+                Optional.ofNullable(lowestEntry).map(Map.Entry::getValue).orElse(null),
+                Optional.ofNullable(upperBorder).map(Map.Entry::getValue).orElse(null)
+        );
     }
 
     private void decrementAmountOfReadRequests() {
@@ -355,37 +428,8 @@ public class LocalFilePointersManager {
         }
     }
 
-    private class DataFileRawContent {
-
-        private final Long dataFileSequenceNumber;
-
-        public void setRawData(String rawData) {
-            this.rawData = rawData;
-        }
-
-        private String rawData;
-
-        /**
-         * The byte offset, beginning from which {@link #rawData} was read
-         */
-        private final Long rawDataByteOffset;
-
-        public DataFileRawContent(Long dataFileSequenceNumber, String rawData, Long rawDataByteOffset) {
-            this.dataFileSequenceNumber = dataFileSequenceNumber;
-            this.rawData = rawData;
-            this.rawDataByteOffset = rawDataByteOffset;
-        }
-
-        public Long getDataFileSequenceNumber() {
-            return dataFileSequenceNumber;
-        }
-
-        public String getRawData() {
-            return rawData;
-        }
-
-        public Long getRawDataByteOffset() {
-            return rawDataByteOffset;
-        }
+    public void test() {
+        final String valueForKey = this.getValueForKey("kjewqldas");
+        System.out.println("valueForKey = " + valueForKey);
     }
 }

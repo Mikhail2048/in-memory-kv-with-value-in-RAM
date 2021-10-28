@@ -59,7 +59,8 @@ public class InMemoryRedBlackTreesConstructor {
             StringBuilder key = new StringBuilder();
             final byte[] fileContentByteArray = fileInputStream.readAllBytes(); // JVM is capable of handing file size in memory, file size no more then 100KB
             boolean isKeyRelatedByte = true;
-            int amountOfKeyValuePairsRead = 0;
+            int amountOfKeyValuePairsInADF = 0;
+            int amountOfKeyValuePairsReadIntoMemory = 0;
             for (int i = 0; i < fileContentByteArray.length; i++) {
                 if (fileContentByteArray[i] == '\n') {
                     key.setLength(0);
@@ -67,23 +68,28 @@ public class InMemoryRedBlackTreesConstructor {
                     continue;
                 }
                 if (fileContentByteArray[i] == ':') {
-                    keyBytesOffsetPointersMap.put(key.toString(), (long) (i + 1));
+                    amountOfKeyValuePairsInADF++;
+                    if (amountOfKeyValuePairsInADF % 100 == 0) {
+                        keyBytesOffsetPointersMap.put(key.toString(), (long) (i + 1));
+                        amountOfKeyValuePairsReadIntoMemory++;
+                    }
                     isKeyRelatedByte = false;
-                    amountOfKeyValuePairsRead++;
                 } else {
                     if (isKeyRelatedByte) key.append((char) fileContentByteArray[i]);
                 }
             }
-            return createDataFilePointerOrNullIfNoRecordsRead(dataFile, keyBytesOffsetPointersMap, amountOfKeyValuePairsRead);
+            return createDataFilePointerOrNullIfNoRecordsRead(dataFile, keyBytesOffsetPointersMap, amountOfKeyValuePairsInADF, amountOfKeyValuePairsReadIntoMemory);
         } catch (IOException | FileInvalidFormatException e) {
             e.printStackTrace();
             throw new InternalError();
         }
     }
 
-    private DataFilePointer createDataFilePointerOrNullIfNoRecordsRead(File dataFile, NavigableMap<String, Long> keyBytesOffsetPointersMap, int amountOfKeyValuePairsRead) throws FileInvalidFormatException {
+    private DataFilePointer createDataFilePointerOrNullIfNoRecordsRead(File dataFile, NavigableMap<String, Long> keyBytesOffsetPointersMap,
+                                                                       int amountOfKeyValuePairsRead, int amountOfKeyValuePairsReadIntoMemory) throws FileInvalidFormatException {
         if (amountOfKeyValuePairsRead != 0) {
-            System.out.printf("Loaded archived in-memory RBT from ADF: '%s'. Loaded '%s' key/value pairs into memory%n", dataFile.getName(), amountOfKeyValuePairsRead);
+            System.out.printf("Loaded archived in-memory RBT from ADF: '%s'. The amount of records in ADF: '%s'. Loaded '%s' key/value pairs into memory.%n",
+                    dataFile.getName(), amountOfKeyValuePairsRead, amountOfKeyValuePairsReadIntoMemory);
             return new DataFilePointer(dataFilesProcessingHelper.getDataFileSequenceNumber(dataFile), keyBytesOffsetPointersMap);
         } else {
             return null;

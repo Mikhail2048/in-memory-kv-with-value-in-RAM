@@ -27,7 +27,7 @@ public class Main {
 
     public static final boolean IS_RUNNING = true;
     private static final InputParser inputParser = new InputParser();
-    private static final int AISA_PORT = 4421;
+    private static final int AISA_PORT = 4423;
     private static LocalFilePointersManager localPointersManager;
     private static BufferedReader bufferedReader;
     private static OutputStream outputStream;

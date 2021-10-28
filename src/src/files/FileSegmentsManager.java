@@ -159,7 +159,10 @@ public class FileSegmentsManager {
         try {
             final Path newSquashedFile = createNewSSTableFileWithSeqNumber(0);
             populateNewSquashedFileWithContentFromMap(squashedFileContentMap, newSquashedFile);
-            cleanUp(inMemoryRedBlackTreesConstructor.readValuesMapFromFile(newSquashedFile.toFile()).getKeyValueByteOffsetOnDiskRedBlackTree(), tailDataFiles, newSquashedFile);
+            cleanUp(
+                    inMemoryRedBlackTreesConstructor.readValuesMapFromFile(newSquashedFile.toFile()).getKeyValueByteOffsetOnDiskRedBlackTree(),
+                    tailDataFiles, newSquashedFile
+            );
         } catch (IOException e) {
             e.printStackTrace();
         } catch (FileInvalidFormatException e) {
