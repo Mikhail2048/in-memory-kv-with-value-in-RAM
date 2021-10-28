@@ -1,5 +1,6 @@
 package src.files;
 
+import src.core.BloomFilter;
 import src.core.InMemoryRedBlackTreesConstructor;
 import src.core.config.CacheConfigConstants;
 import src.core.models.DataFilePointer;
@@ -130,6 +131,7 @@ public class LocalFilePointersManager {
                 dataFilesProcessingHelper.getDataFileSequenceNumber(new File(System.getProperty(CacheConfigConstants.CURRENT_WRITABLE_SS_TABLE_FILE_LOCATION)))
         );
         final NavigableMap<String, Long> archivedTreeMap = new TreeMap<>();
+        final BloomFilter bloomFilter = new BloomFilter();
         StringBuilder dataToBeFlushedToDisk = new StringBuilder();
         AtomicLong valueByteOffset = new AtomicLong();
         memoryRedBlackTree.entrySet()// <-- here we traverse the RBT, and the order is ascending
@@ -140,10 +142,12 @@ public class LocalFilePointersManager {
                     if (valueByteOffset.get() % 100 == 0) {
                         archivedTreeMap.put(keyValueEntry.getKey(), currentValueByteOffset);
                     }
+                    bloomFilter.put(keyValueEntry.getKey());
                     valueByteOffset.addAndGet((keyValueEntry.getValue() + "\n").getBytes(StandardCharsets.UTF_8).length);
                 });
         writePassedDataToCurrentSSTable(dataToBeFlushedToDisk);
         currentWritableSSTableFilePointer.setKeyValueByteOffsetOnDiskRedBlackTree(archivedTreeMap);
+        currentWritableSSTableFilePointer.setBloomFilter(bloomFilter);
         inMemoryMaps.addFirst(currentWritableSSTableFilePointer);
         memoryRedBlackTree.clear();
         FileSegmentsManager.getInstance().truncateLogFile();
@@ -340,22 +344,25 @@ public class LocalFilePointersManager {
             if ((targetValueOffset = inMemoryMap.getKeyValueByteOffsetOnDiskRedBlackTree().get(key)) != null) {
                 return realValuesFileReader.readSingleValue(inMemoryMap.getSequenceNumber(), targetValueOffset);
             }
-            final DataFileScanOptions dataFileScanOptions = extractPossibleSearchBorders(key, inMemoryMap);
-            final DataFileRawContent dataFileRawContent = scanAppropriateDataFileArea(dataFileScanOptions);
-            removeTailIfRequired(dataFileRawContent);
-            final List<Record> records = rawDataParser.parseKeyValuePairs(dataFileRawContent.getRawData().getBytes(StandardCharsets.UTF_8));
-            int index = Collections.binarySearch(records, new Record(key));
-            if (index > 0) {
-                /**
-                 * This is because during binary search there is no guarantee, that we will get the most recent
-                 * (in our case the rightest) value for the specified key. We need, jsut in case, check, whenever
-                 * there are some records, that goes <b>after</b> returned binary search index, that has exactly
-                 * the same key as records.get(index).
-                 */
-                while (records.get(index + 1).compareTo(records.get(index)) == 0) {
-                    index++;
+            if (inMemoryMap.getBloomFilter().mayExists(key)) {
+                System.out.printf("The key provided by GET : '%s' may exists on Disk. Making Input disk call%n", key);
+                final DataFileScanOptions dataFileScanOptions = extractPossibleSearchBorders(key, inMemoryMap);
+                final DataFileRawContent dataFileRawContent = scanAppropriateDataFileArea(dataFileScanOptions);
+                removeTailIfRequired(dataFileRawContent);
+                final List<Record> records = rawDataParser.parseKeyValuePairs(dataFileRawContent.getRawData().getBytes(StandardCharsets.UTF_8));
+                int index = Collections.binarySearch(records, new Record(key));
+                if (index > 0) {
+                    /**
+                     * This is because during binary search there is no guarantee, that we will get the most recent
+                     * (in our case the rightest) value for the specified key. We need, jsut in case, check, whenever
+                     * there are some records, that goes <b>after</b> returned binary search index, that has exactly
+                     * the same key as records.get(index).
+                     */
+                    while (records.get(index + 1).compareTo(records.get(index)) == 0) {
+                        index++;
+                    }
+                    return records.get(index).getValue();
                 }
-                return records.get(index).getValue();
             }
         }
         decrementAmountOfReadRequests();

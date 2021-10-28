@@ -1,5 +1,7 @@
 package src.core.models;
 
+import src.core.BloomFilter;
+
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.TreeMap;
@@ -23,6 +25,11 @@ public class DataFilePointer {
      * not or 171.
      */
     private NavigableMap<String, Long> keyValueByteOffsetOnDiskRedBlackTree;
+
+    /**
+     * Bloom Filter for this specific ADF (Aisa Data File)
+     */
+    private BloomFilter bloomFilter;
 
     public DataFilePointer(long sequenceNumber) {
         this(sequenceNumber, new TreeMap<>());
@@ -56,5 +63,13 @@ public class DataFilePointer {
 
     public NavigableMap<String, Long> getKeyValueByteOffsetOnDiskRedBlackTree() {
         return keyValueByteOffsetOnDiskRedBlackTree;
+    }
+
+    public BloomFilter getBloomFilter() {
+        return bloomFilter;
+    }
+
+    public void setBloomFilter(BloomFilter bloomFilter) {
+        this.bloomFilter = bloomFilter;
     }
 }

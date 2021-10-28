@@ -54,6 +54,7 @@ public class InMemoryRedBlackTreesConstructor {
 
     public DataFilePointer readValuesMapFromFile(File dataFile) {
         NavigableMap<String, Long> keyBytesOffsetPointersMap = new TreeMap<>();
+        BloomFilter bloomFilter = new BloomFilter(10000);
         try {
             final FileInputStream fileInputStream = new FileInputStream(dataFile);
             StringBuilder key = new StringBuilder();
@@ -73,24 +74,27 @@ public class InMemoryRedBlackTreesConstructor {
                         keyBytesOffsetPointersMap.put(key.toString(), (long) (i + 1));
                         amountOfKeyValuePairsReadIntoMemory++;
                     }
+                    bloomFilter.put(key.toString());
                     isKeyRelatedByte = false;
                 } else {
                     if (isKeyRelatedByte) key.append((char) fileContentByteArray[i]);
                 }
             }
-            return createDataFilePointerOrNullIfNoRecordsRead(dataFile, keyBytesOffsetPointersMap, amountOfKeyValuePairsInADF, amountOfKeyValuePairsReadIntoMemory);
+            return createDataFilePointerOrNullIfNoRecordsRead(bloomFilter, dataFile, keyBytesOffsetPointersMap, amountOfKeyValuePairsInADF, amountOfKeyValuePairsReadIntoMemory);
         } catch (IOException | FileInvalidFormatException e) {
             e.printStackTrace();
             throw new InternalError();
         }
     }
 
-    private DataFilePointer createDataFilePointerOrNullIfNoRecordsRead(File dataFile, NavigableMap<String, Long> keyBytesOffsetPointersMap,
+    private DataFilePointer createDataFilePointerOrNullIfNoRecordsRead(BloomFilter bloomFilter, File dataFile, NavigableMap<String, Long> keyBytesOffsetPointersMap,
                                                                        int amountOfKeyValuePairsRead, int amountOfKeyValuePairsReadIntoMemory) throws FileInvalidFormatException {
         if (amountOfKeyValuePairsRead != 0) {
             System.out.printf("Loaded archived in-memory RBT from ADF: '%s'. The amount of records in ADF: '%s'. Loaded '%s' key/value pairs into memory.%n",
                     dataFile.getName(), amountOfKeyValuePairsRead, amountOfKeyValuePairsReadIntoMemory);
-            return new DataFilePointer(dataFilesProcessingHelper.getDataFileSequenceNumber(dataFile), keyBytesOffsetPointersMap);
+            final DataFilePointer dataFilePointer = new DataFilePointer(dataFilesProcessingHelper.getDataFileSequenceNumber(dataFile), keyBytesOffsetPointersMap);
+            dataFilePointer.setBloomFilter(bloomFilter);
+            return dataFilePointer;
         } else {
             return null;
         }
